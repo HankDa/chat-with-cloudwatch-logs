@@ -27,12 +27,13 @@ b = 0
 a = b + 10
 ```
 
+```
 Timestamps:
 2024-05-24 16:07:20.617
 2024-05-24 16:07:19.683
 2024-05-24 16:07:18.384
 2024-05-24 16:07:15.777
-
+```
 Log message:
 ZeroDivisionError: division by zero
 Traceback (most recent call last):
@@ -52,7 +53,7 @@ if denominator != 0:
 else:
     print("Error: Division by zero is not allowed.")
 ```
-
+```
 Timestamps:
 2024-05-22 12:33:00.807
 2024-05-22 12:32:51.515
@@ -83,3 +84,4 @@ Timestamps:
 2024-05-21 13:49:06.205
 2024-05-21 13:49:03.694
 2024-05-21 13:48:58.354
+```
