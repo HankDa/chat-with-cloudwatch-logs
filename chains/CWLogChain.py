@@ -1,8 +1,19 @@
 import boto3
 import json
-from langchain.output_parsers import StructuredOutputParser, ResponseSchema
+from langchain.output_parsers import StructuredOutputParser, ResponseSchema, PydanticOutputParser
 from langchain.prompts import PromptTemplate
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
+class Instruction(BaseModel):
+    instruction: str
+    tool: str
+    fetch_log_instruction: str
+    investigate_log_instruction: str
+
+class Instructions(BaseModel):
+    question: str
+    instructions: List[Instruction]
 
 class CWLogChain:
 
@@ -13,25 +24,25 @@ class CWLogChain:
 
     def general_guidence(self, question):
 
-        response_schemas = [
-            ResponseSchema(name="question", description="put user's prompt here"),
-            ResponseSchema(name="cloudTrail_instructions", description="put cloudTrail log dive instruction here"),
-            ResponseSchema(name="cloudWatch_instructions", description="put cloudWatch log dive instruction here"),
-            ResponseSchema(name="others_instructions", description="put other instructions here")
-        ]
-
-        output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
+        output_parser = PydanticOutputParser(pydantic_object=Instructions)
         format_instructions = output_parser.get_format_instructions()
 
         PROMPT_TEMPLATE = """
 
         Provide investigated instructions for the given USER INPUT. 
+        
+        Provide at least one instruction use cloudwatch log.
+
+        Provide detailed step-by-step instructions for investigating the given USER INPUT, including:
+            "instruction": "A concise instruction on how to investigate the issue, using Amazon CloudWatch Logs or other tools",
+            "tool": "The AWS service to use for the investigation (either 'aws cloudwatch' or 'aws cloudtrail')",
+            "fetch_log_instruction": "Detailed steps on how to fetch the relevant log information from Amazon CloudWatch",
+            "investigate_log_instruction": "Detailed steps on how to analyze the fetched log information to investigate the issue"
+
 
         % USER INPUT: {user_input}
                 
         {format_instructions}
-
-        Each instruction should be a single paragraph.
 
         """
         prompt = PromptTemplate(
@@ -43,7 +54,9 @@ class CWLogChain:
         promptValue = prompt.format(user_input=question)
         print(promptValue)
         response = self.llm(promptValue)
-        parsed_response = output_parser.parse(response)
+        # TODO: what is the output type of output_parser? 
+        parsed_response = json.loads(output_parser.parse(response).model_dump_json())
+        
         return parsed_response
 
 
