@@ -1,6 +1,6 @@
 import boto3
 import json
-from langchain.output_parsers import StructuredOutputParser, ResponseSchema, PydanticOutputParser
+from langchain.output_parsers import StructuredOutputParser, ResponseSchema, PydanticOutputParser, RetryWithErrorOutputParser
 from langchain.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -23,20 +23,23 @@ class CWLogChain:
         self.llm = llm
 
     def general_guidence(self, question):
-
+        # create PydanticOutputParser instance to ingest define shema
         output_parser = PydanticOutputParser(pydantic_object=Instructions)
+        # generate format_instructions str
         format_instructions = output_parser.get_format_instructions()
 
         PROMPT_TEMPLATE = """
 
         Provide investigated instructions for the given USER INPUT. 
         
-        Provide at least one instruction use cloudwatch log.
+        The instructions should be:
+        - at least one instruction use cloudwatch log.
+        - provide log filter base on USER INPUT.
 
-        Provide detailed step-by-step instructions for investigating the given USER INPUT, including:
-            "instruction": "A concise instruction on how to investigate the issue, using Amazon CloudWatch Logs or other tools",
+        Provide detailed instructions for investigating the given USER INPUT, including:
+            "instruction": "A concise explaintion of the issue and a set of instructions on how to investigate the issue, using Amazon CloudWatch Logs or other tools",
             "tool": "The AWS service to use for the investigation (either 'aws cloudwatch' or 'aws cloudtrail')",
-            "fetch_log_instruction": "Detailed steps on how to fetch the relevant log information from Amazon CloudWatch",
+            "fetch_log_instruction": "Detailed steps on how to fetch the relevant log or information",
             "investigate_log_instruction": "Detailed steps on how to analyze the fetched log information to investigate the issue"
 
 
@@ -45,6 +48,7 @@ class CWLogChain:
         {format_instructions}
 
         """
+
         prompt = PromptTemplate(
             input_variables=["user_input"],
             partial_variables={"format_instructions": format_instructions},
@@ -52,13 +56,17 @@ class CWLogChain:
         )
 
         promptValue = prompt.format(user_input=question)
-        print(promptValue)
+        
+        retry_parser = RetryWithErrorOutputParser.from_llm(
+                        parser=output_parser, llm=self.llm)
         response = self.llm(promptValue)
         # TODO: what is the output type of output_parser? 
-        parsed_response = json.loads(output_parser.parse(response).model_dump_json())
+        parsed_response = json.loads(
+            retry_parser.parse_with_prompt(
+                response, promptValue).model_dump_json()
+                )
         
         return parsed_response
-
 
     def generate_query_string(self, question):
         """
@@ -100,7 +108,6 @@ class CWLogChain:
         )
         # Generate the query string
         promptValue = prompt.format(user_input=question)
-        print(promptValue)
         response = self.llm(promptValue)
         parsed_response = output_parser.parse(response)
         return parsed_response
