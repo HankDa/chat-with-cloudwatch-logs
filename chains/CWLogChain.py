@@ -1,5 +1,7 @@
 import boto3
 import json
+from langchain.output_parsers import StructuredOutputParser, ResponseSchema
+from langchain.prompts import PromptTemplate
 
 
 class CWLogChain:
@@ -9,13 +11,61 @@ class CWLogChain:
         self.cloudwatch_logs = session.client('logs')
         self.llm = llm
 
-    def generate_query_string(self, prompt):
+    def general_guidence(self, question):
+
+        response_schemas = [
+            ResponseSchema(name="question", description="put user's prompt here"),
+            ResponseSchema(name="cloudTrail_instructions", description="put cloudTrail log dive instruction here"),
+            ResponseSchema(name="cloudWatch_instructions", description="put cloudWatch log dive instruction here"),
+            ResponseSchema(name="others_instructions", description="put other instructions here")
+        ]
+
+        output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
+        format_instructions = output_parser.get_format_instructions()
+
+        PROMPT_TEMPLATE = """
+
+        Provide investigated instructions for the given USER INPUT. 
+
+        % USER INPUT: {user_input}
+                
+        {format_instructions}
+
+        Each instruction should be a single paragraph.
+
+        """
+        prompt = PromptTemplate(
+            input_variables=["user_input"],
+            partial_variables={"format_instructions": format_instructions},
+            template=PROMPT_TEMPLATE
+        )
+
+        promptValue = prompt.format(user_input=question)
+        print(promptValue)
+        response = self.llm(promptValue)
+        parsed_response = output_parser.parse(response)
+        return parsed_response
+
+
+    def generate_query_string(self, question):
         """
         Generate a query string based on the prompt
         """
+
+        response_schemas = [
+            ResponseSchema(name="question", description="put user's prompt here"),
+            ResponseSchema(name="queryString", description="put cloudwatch insight query string here"),
+        ]
+
+        output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
+        format_instructions = output_parser.get_format_instructions()
+        
         # Template for the prompt
         PROMPT_TEMPLATE = """
-        PROMPT_TEXT : {prompt}
+
+        Provide cloudwatch insight query string for the given USER INPUT.
+
+        % USER INPUT: {user_input}
 
         The query should:
         - Generate a CloudWatch Logs Insights query
@@ -26,21 +76,22 @@ class CWLogChain:
 
         The response should follow below format:
 
-        Query string: put your response here
-        extra note: put your extra note here(option prefer not to include)
+        {format_instructions}
        
         """
-        
+
+        prompt = PromptTemplate(
+            input_variables=["user_input"],
+            partial_variables={"format_instructions": format_instructions},
+            template=PROMPT_TEMPLATE
+        )
         # Generate the query string
-        response = self.llm(PROMPT_TEMPLATE.format(prompt=prompt))
-        # Split the response into lines
-        query_lines = response.split("\n")
-        # Filter out lines that start with "fields" or "|"
-        query = " ".join([line for line in query_lines if line.startswith("fields") or line.startswith("|")])
-        # Check if the query string is empty
-        if not query:
-            raise ValueError("Unable to extract query string from response, try more precise prompt")
-        return query
+        promptValue = prompt.format(user_input=question)
+        print(promptValue)
+        response = self.llm(promptValue)
+        parsed_response = output_parser.parse(response)
+        return parsed_response
+
 
     def query_cloudwatch_logs(self, log_group_name, query_string, start_time, end_time):
         """
@@ -99,7 +150,7 @@ class CWLogChain:
 
         if there are different log messages, use above format to list them.
 
-        Please provide the explanation and solution for the given log entry.
+        Please provide response base on prompt for the given log entry.
         """
 
         response = self.llm(PROMPT_TEMPLATE.format(log_entry=cw_logs_string, 
