@@ -144,8 +144,7 @@ class CWLogChain:
     def generate_cw_log_report(self, cw_logs, prompt):
         # Convert the log entries to JSON strings (it was JSON format)
         cw_logs_string = json.dumps(cw_logs)
-
-        # TODO: read from upload file? based on services to change template
+        # TODO: the logs string might be exceed token limitation, need to chunk it.
         PROMPT_TEMPLATE = """
         {prompt}
 
